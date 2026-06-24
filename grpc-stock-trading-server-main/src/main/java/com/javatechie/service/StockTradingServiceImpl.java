@@ -2,15 +2,14 @@ package com.javatechie.service;
 
 
 import com.javatechie.entity.Stock;
-import com.javatechie.grpc.StockRequest;
-import com.javatechie.grpc.StockResponse;
-import com.javatechie.grpc.StockTradingServiceGrpc;
+import com.javatechie.grpc.*;
 import com.javatechie.repository.StockRepository;
 import io.grpc.stub.StreamObserver;
+import org.springframework.grpc.server.service.GrpcService;
+
 import java.time.Instant;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-import org.springframework.grpc.server.service.GrpcService;
 
 @GrpcService
 public class StockTradingServiceImpl extends StockTradingServiceGrpc.StockTradingServiceImplBase {
@@ -25,7 +24,7 @@ public class StockTradingServiceImpl extends StockTradingServiceGrpc.StockTradin
     @Override
     public void getStockPrice(StockRequest request,
         StreamObserver<StockResponse> responseObserver) {
-        System.out.println("getStockPrice called : " + request.getStockSymbol());
+
         //stockName -> DB -> map response -> return
 
         String stockSymbol = request.getStockSymbol();
@@ -44,7 +43,7 @@ public class StockTradingServiceImpl extends StockTradingServiceGrpc.StockTradin
 
     @Override
     public void subscribeStockPrice(StockRequest request, StreamObserver<StockResponse> responseObserver) {
-        String symbol=request.getStockSymbol();
+        String symbol = request.getStockSymbol();
 
         try {
             for (int i = 0; i <= 10; i++) {
@@ -57,8 +56,45 @@ public class StockTradingServiceImpl extends StockTradingServiceGrpc.StockTradin
                 TimeUnit.SECONDS.sleep(1);
             }
             responseObserver.onCompleted();
-        }catch (Exception ex){
+        } catch (Exception ex) {
             responseObserver.onError(ex);
         }
+    }
+
+    @Override
+    public StreamObserver<StockOrder> bulkStockOrder(StreamObserver<OrderSummary> responseObserver) {
+
+        return new StreamObserver<StockOrder>() {
+
+            private int totalOrders = 0;
+            private double totalAmount = 0;
+            private int successCount = 0;
+
+            @Override
+            public void onNext(StockOrder stockOrder) {
+                totalOrders++;
+                totalAmount += stockOrder.getPrice() * stockOrder.getQuantity();
+                successCount++;
+                System.out.println("Received order : " + stockOrder);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                System.out.println("Server unable to process the request : "+throwable.getMessage());
+            }
+
+            @Override
+            public void onCompleted() {
+                OrderSummary summary = OrderSummary.newBuilder()
+                    .setTotalOrders(totalOrders)
+                    .setSuccessCount(successCount)
+                    .setTotalAmount(totalAmount)
+                    .build();
+                responseObserver.onNext(summary);
+                responseObserver.onCompleted();
+
+            }
+        };
+
     }
 }
